@@ -31,6 +31,9 @@ VIP_DEEP_LINK = "beautyvip"
 message_queue = deque()
 processing = False
 
+# Dictionary для хранения ID сообщений о статусе очереди
+queue_status_messages = {}
+
 # Course registration URL - centralized for easy updates
 REGISTRATION_URL = "http://beauty.reels.ursu.tilda.ws"
 
@@ -169,6 +172,45 @@ async def forward_user_message_to_admins(user: types.User, message_text: str, qu
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user = message.from_user
+
+    # Проверяем, не запускал ли пользователь бота ранее (защита от перезапуска)
+    if user.id in registered_users:
+        # Если пользователь уже использовал бота, отправляем сообщение с объяснением
+        if user.id in user_questions and user_questions[user.id] >= MAX_QUESTIONS and user.id not in VIP_USERS:
+            await message.answer(
+                f"{user.first_name}, я вижу, что ты уже исчерпал свой лимит вопросов 💫\n\n"
+                f"К сожалению, перезапуск бота не обнуляет счетчик вопросов — я слишком умная для этого 😉\n\n"
+                f"<b>Для реальных денег в бьюти-сфере нужна продуманная стратегия!</b> Предлагаю не тратить "
+                f"время впустую и получить все ответы сразу на курсе.\n\n"
+                f"<b>Заполняй анкету предзаписи</b>👉 {REGISTRATION_URL}",
+                reply_markup=get_limit_reached_keyboard(),
+                parse_mode="HTML"
+            )
+            return
+        else:
+            # Если пользователь просто перезапустил, напоминаем, сколько у него вопросов осталось
+            remaining = MAX_QUESTIONS - user_questions.get(user.id, 0)
+            if user.id not in VIP_USERS and remaining > 0:
+                remaining_text = f"У тебя осталось {remaining} вопрос(ов) из {MAX_QUESTIONS}."
+            elif user.id in VIP_USERS:
+                remaining_text = "У тебя VIP-доступ с неограниченным количеством вопросов."
+            else:
+                await message.answer(
+                    f"{user.first_name}, твой лимит вопросов исчерпан.\n\n"
+                    f"<b>Заполняй анкету предзаписи</b>👉 {REGISTRATION_URL}",
+                    reply_markup=get_limit_reached_keyboard(),
+                    parse_mode="HTML"
+                )
+                return
+
+            await message.answer(
+                f"Привет снова, {user.first_name}! Ты уже знакома со мной. {remaining_text}\n\n"
+                f"Задавай свой вопрос, я с радостью помогу! 👇",
+                parse_mode="HTML"
+            )
+            return
+
+    # Если это первое обращение пользователя
     user_questions[user.id] = 0
 
     # Check for VIP deep link
@@ -210,7 +252,15 @@ async def process_message_queue():
     processing = True
 
     while message_queue:
-        message, is_vip = message_queue.popleft()
+        message, is_vip, status_message_id = message_queue.popleft()
+
+        # Удаляем сообщение о статусе очереди, если оно есть
+        if status_message_id is not None:
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=status_message_id)
+            except Exception as e:
+                logging.error(f"Error deleting queue status message: {e}")
+
         await process_user_message(message, is_vip)
 
     processing = False
@@ -233,8 +283,7 @@ async def process_user_message(message: Message, is_vip: bool):
     animation_task = asyncio.create_task(animate_thinking_message(thinking_message))
 
     try:
-        # Модифицируем системный промпт, чтобы избежать приветствий в каждом сообщении
-        # Добавляем инструкцию по избеганию приветствий в каждом сообщении
+        # Системный промпт
         system_prompt = """# Инструкция для Виртуальной Дианы Урсу
 
 ## Кто такая Диана Урсу?
@@ -491,7 +540,6 @@ async def process_user_message(message: Message, is_vip: bool):
 
             # Check if limit is reached after this question
             if user_questions[user.id] >= MAX_QUESTIONS:
-                # Отправляем сообщение с жирными фразами используя HTML вместо Markdown
                 await message.answer(
                     f"Я хоть и виртуальная Диана, но тоже могу устать 😴\n\n"
                     "Нейросети полезны, но <b>для реальных денег в бьюти-сфере нужна продуманная стратегия!</b> "
@@ -525,6 +573,7 @@ async def filter_messages(message: Message):
     # Initialize question counter if not exists
     if user.id not in user_questions:
         user_questions[user.id] = 0
+        registered_users.add(user.id)  # Добавляем в список зарегистрированных, если не было
 
     # Check if user is VIP
     is_vip = user.id in VIP_USERS
@@ -540,19 +589,24 @@ async def filter_messages(message: Message):
         )
         return
 
-        # Отправляем сообщение администраторам о новом вопросе пользователя
+    # Отправляем сообщение администраторам о новом вопросе пользователя
     current_question_count = user_questions[user.id] + 1  # +1 потому что текущий вопрос еще не учтен в счетчике
     await forward_user_message_to_admins(user, message.text, current_question_count)
 
-    # If queue is getting long, inform user
-    if len(message_queue) > 5:
-        await message.answer(
-            f"{user.first_name}, очень много бьюти-мастеров задают мне вопросы прямо сейчас, "
-            "отвечу тебе в течении пары минут⏰"
+    # Сообщаем пользователю о статусе в очереди, если очередь не пуста
+    status_message_id = None
+    if len(message_queue) > 0:
+        status_message = await message.answer(
+            f"✨ Твой вопрос в очереди, {user.first_name}! ✨\n\n"
+            f"Сейчас много бьюти-мастеров обращаются ко мне. "
+            f"Ты на {len(message_queue) + 1} месте в очереди.\n\n"
+            f"Как только я освобожусь, сразу отвечу тебе! 💄👑",
+            parse_mode="HTML"
         )
+        status_message_id = status_message.message_id
 
-    # Add message to processing queue
-    message_queue.append((message, is_vip))
+    # Add message to processing queue с ID сообщения о статусе
+    message_queue.append((message, is_vip, status_message_id))
 
     # Start processing the queue if not already processing
     asyncio.create_task(process_message_queue())
