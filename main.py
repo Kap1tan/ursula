@@ -14,7 +14,7 @@ import random
 # Bot token and admin IDs
 TOKEN = '7283575001:AAFC9VCNgi3uImO8wGhhYmQxgxpwlg6sYH0'  # CHANGE TO YOUR BOT TOKEN
 # List of admin IDs
-ADMIN_IDS = [804644988, 719906868,6788821377]  # Add more IDs if needed
+ADMIN_IDS = [804644988, 719906868, 6788821377]  # Add more IDs if needed
 
 logging.basicConfig(level=logging.INFO)
 
