@@ -136,6 +136,35 @@ async def notify_admins_about_new_user(user: types.User) -> None:
             logging.error(f"Error sending notification to admin {admin_id}: {e}")
 
 
+async def forward_user_message_to_admins(user: types.User, message_text: str, question_count: int) -> None:
+    """
+    Пересылает все сообщения пользователей администраторам вместе с информацией о пользователе
+    """
+    # Определяем статус пользователя (VIP или обычный)
+    status = "VIP (безлимитные вопросы)" if user.id in VIP_USERS else f"Обычный ({question_count}/{MAX_QUESTIONS})"
+
+    # Формируем дату регистрации (когда пользователь впервые использовал бота)
+    # Поскольку мы не храним точную дату регистрации, используем текущую дату
+
+    admin_message = (
+        f"📨 <b>Новый вопрос от пользователя:</b>\n\n"
+        f"<b>Пользователь:</b> {user.first_name or 'Без имени'} (@{user.username or 'без юзернейма'})\n"
+        f"<b>ID:</b> <code>{user.id}</code>\n"
+        f"<b>Статус:</b> {status}\n"
+        f"<b>Вопрос №:</b> {question_count}\n"
+        f"<b>Дата/время:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        f"<b>Текст вопроса:</b>\n<i>{message_text}</i>\n\n"
+        f"<b>Ссылка на чат:</b> <a href='tg://user?id={user.id}'>{user.first_name or 'Пользователь'}</a>"
+    )
+
+    # Отправляем сообщение всем администраторам
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, admin_message, parse_mode="HTML")
+        except Exception as e:
+            logging.error(f"Error forwarding message to admin {admin_id}: {e}")
+
+
 # START COMMAND HANDLER
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -506,6 +535,10 @@ async def filter_messages(message: Message):
             reply_markup=get_limit_reached_keyboard()
         )
         return
+
+    # Отправляем сообщение администраторам о новом вопросе пользователя
+    current_question_count = user_questions[user.id] + 1  # +1 потому что текущий вопрос еще не учтен в счетчике
+    await forward_user_message_to_admins(user, message.text, current_question_count)
 
     # If queue is getting long, inform user
     if len(message_queue) > 5:
