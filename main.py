@@ -455,7 +455,7 @@ async def process_user_message(message: Message, is_vip: bool):
         # Create OpenAI client - вынесено из семафора для оптимизации
         client = OpenAI(
             base_url="https://api.langdock.com/openai/eu/v1",
-            api_key="sk-NdNXwXWKDLPPIy7axnw2Kvy-z5JiwxLoGzJfNjSNXZRPeqi4OD1iS-AS4mPkAZBJJL-2WDUHSJIYCgg1xgEppw"
+            api_key="sk-T6zfIbzZkJRo8aHX6JkXoHEzdS097PcEd0EsB2htU9G1Xk2u_F0xJDv60-AWNRQG5thRzIwM1v00Ot4enzCG6Q"
         )
 
         # Используем семафор для ограничения числа одновременных запросов к API
