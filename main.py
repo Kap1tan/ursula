@@ -743,6 +743,7 @@ async def process_user_message(message: Message, is_vip: bool):
                     reply_markup=get_limit_reached_keyboard(),
                     parse_mode="HTML"
                 )
+    # Find this section in process_user_message function (around line 605-622)
     except Exception as e:
         # Останавливаем задачу анимации и удаляем сообщение "thinking"
         if 'animation_task' in locals() and animation_task is not None:
@@ -752,8 +753,7 @@ async def process_user_message(message: Message, is_vip: bool):
         # Send error message
         logger.error(f"Error processing message: {e}")
         await message.answer(
-            f"Извини, произошла ошибка при обработке твоего вопроса. Пожалуйста, попробуй еще раз или обратись к Диане через анкету предзаписи на курс: {REGISTRATION_URL}",
-            reply_markup=get_limit_reached_keyboard(),
+            "Извини, произошла ошибка при обработке твоего вопроса. Пожалуйста, попробуй еще раз или обратись к отделу заботы Дианы о том что произошел сбой: @diana_ursu",
             parse_mode="HTML"
         )
 
