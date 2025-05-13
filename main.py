@@ -815,32 +815,30 @@ async def filter_messages(message: Message):
 
 # Scheduled reminder
 async def send_reminder():
-    """Send reminder to users who haven't filled the form yet"""
-    while True:
-        try:
-            # Wait for 2 hours
-            await asyncio.sleep(7200)  # 2 * 60 * 60 seconds
+    """Send reminder to users who haven't filled the form yet (only once after 2 hours)"""
+    try:
+        # Wait for 2 hours
+        await asyncio.sleep(7200)  # 2 * 60 * 60 seconds
 
-            for user_id in registered_users:
-                if user_id not in VIP_USERS and user_id in user_questions and user_questions[user_id] > 0:
-                    try:
-                        user = await bot.get_chat(user_id)
-                        await bot.send_message(
-                            user_id,
-                            f"{user.first_name}, кажется, <b>вы упускаете кое-что важное!</b> "
-                            "Я не вижу вас в закрытом тг-канале будущих учениц курса «Бьюти-reels»! 😱\n\n"
-                            f"Именно туда ты попадешь после заполнения анкеты👉 {REGISTRATION_URL}\n\n"
-                            "<b>Внутри – эксклюзивные материалы:</b> полная программа курса, самые выгодные цены на новый поток, "
-                            "полезные подкасты и многое другое!\n\n"
-                            "Не упусти шанс получить ценные знания – заполни анкету и присоединяйся прямо сейчас!",
-                            reply_markup=get_reminder_keyboard(),
-                            parse_mode="HTML"
-                        )
-                    except Exception as e:
-                        logger.error(f"Error sending reminder to user {user_id}: {e}")
-        except Exception as e:
-            logger.error(f"Error in reminder task: {e}")
-            await asyncio.sleep(60)  # Если ошибка, ждем минуту и пытаемся снова
+        for user_id in registered_users:
+            if user_id not in VIP_USERS and user_id in user_questions and user_questions[user_id] > 0:
+                try:
+                    user = await bot.get_chat(user_id)
+                    await bot.send_message(
+                        user_id,
+                        f"{user.first_name}, кажется, <b>вы упускаете кое-что важное!</b> "
+                        "Я не вижу вас в закрытом тг-канале будущих учениц курса «Бьюти-reels»! 😱\n\n"
+                        f"Именно туда ты попадешь после заполнения анкеты👉 {REGISTRATION_URL}\n\n"
+                        "<b>Внутри – эксклюзивные материалы:</b> полная программа курса, самые выгодные цены на новый поток, "
+                        "полезные подкасты и многое другое!\n\n"
+                        "Не упусти шанс получить ценные знания – заполни анкету и присоединяйся прямо сейчас!",
+                        reply_markup=get_reminder_keyboard(),
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending reminder to user {user_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error in reminder task: {e}")
 
 
 async def main():
@@ -848,15 +846,13 @@ async def main():
     load_data()
 
     try:
-        # Start the reminder task
-        reminder_task = asyncio.create_task(send_reminder())
+        # Start the reminder task (will run once after 2 hours)
+        asyncio.create_task(send_reminder())
 
         # Настройка для обработки большего количества одновременных пользователей
-        # Увеличиваем лимит соединений для aiohttp
-        connector = aiohttp.TCPConnector(limit=100)  # По умолчанию 100 соединений
+        connector = aiohttp.TCPConnector(limit=100)
         session = aiohttp.ClientSession(connector=connector)
-
-        bot._session = session  # Устанавливаем сессию с увеличенным лимитом соединений
+        bot._session = session
 
         await bot(DeleteWebhook(drop_pending_updates=True))
         await dp.start_polling(bot)
@@ -865,7 +861,6 @@ async def main():
         logger.error(f"Error in main function: {e}")
 
     finally:
-        # Закрываем сессию при завершении работы бота
         if 'session' in locals() and session is not None:
             await session.close()
 
